@@ -2,9 +2,9 @@ package my.reireirei.candleproxy
 
 import java.net.InetSocketAddress
 
-import akka.actor.{Actor, ActorRef}
+import akka.actor.{Actor, ActorRef, Props}
 import akka.io._
-import akka.util.ByteString
+import akka.util.{ByteString, CompactByteString}
 
 import scala.annotation.tailrec
 
@@ -12,9 +12,9 @@ import scala.annotation.tailrec
 /**
   * Created by ReiReiRei on 2/5/2017.
   */
-object Buffering {
+object Frames {
 
-  def getPacket(data: ByteString): (List[Ticker], ByteString) = {
+  def getTickersFromRaw(data: ByteString): (List[Ticker], ByteString) = {
 
     val headerSize = 2
 
@@ -28,24 +28,43 @@ object Buffering {
         if (current.length < len + headerSize) {
           (packets.reverse, current)
         } else {
-          val (front, back) = current.splitAt(len+headerSize)
+          val (front, back) = current.splitAt(len + headerSize)
           val ticker = Ticker.fromPacket(front)
           multiPacket(ticker :: packets, back)
         }
       }
+
     }
+
     multiPacket(List[Ticker](), data)
   }
 }
-
-class Client(remote: InetSocketAddress, listener: ActorRef) extends Actor {
+object Client {
+  def props(remote: InetSocketAddress, listener: ActorRef,candleStorage: ActorRef,tickersStorage: ActorRef) =
+    Props(classOf[Client],remote,listener,candleStorage,tickersStorage)
+}
+class Client(remote: InetSocketAddress, listener: ActorRef,candleStorage: ActorRef,tickersStorage: ActorRef) extends Actor {
 
   import Tcp._
   import context.system
 
   IO(Tcp) ! Connect(remote)
 
-  def receive = {
+  def updateTickers(connection: ActorRef, data: ByteString): Receive = {
+    case CommandFailed(w: Write) =>
+      listener ! "Write failed"
+    case Received =>
+      val (tickers, tail) = Frames.getTickersFromRaw(data)
+      tickersStorage ! tickers
+      context become updateTickers(connection, tail)
+    case "lose" =>
+      connection ! Close
+    case _: ConnectionClosed =>
+      listener ! "connection closed"
+      context stop self
+  }
+
+  def receive: Receive = {
     case CommandFailed(_: Connect) =>
       listener ! "Connect failed"
       context stop self
@@ -54,18 +73,6 @@ class Client(remote: InetSocketAddress, listener: ActorRef) extends Actor {
       listener ! c
       val connection = sender()
       connection ! Register(self)
-      context become {
-        case CommandFailed(w: Write) =>
-             listener ! "write failed"
-        case Received(data) =>
-          listener ! data
-        case "lose" =>
-          connection ! Close
-        case _: ConnectionClosed =>
-          listener ! "connection closed"
-          context stop self
-      }
+      context become updateTickers(connection, CompactByteString())
   }
-
-
 }

@@ -2,7 +2,11 @@ package my.reireirei.candleproxy
 
 import java.time.LocalDateTime
 
-import akka.util.ByteString
+import akka.util.{ByteString, CompactByteString}
+import io.circe._
+import io.circe.generic.auto._
+import io.circe.parser._
+import io.circe.syntax._
 
 /**
   * Created by ReiReiRei on 2/5/2017.
@@ -21,7 +25,12 @@ TICKER: биржевой тикер (ASCII, TICKER_LEN байт)
 PRICE: цена сделки (double, 8 байт)
 SIZE: объем сделки (целое, 4 байта)
 */
-case class Ticker(timeStamp: Long, ticker: String, price: Double, size: Int)
+case class Ticker(timeStamp: Long, ticker: String, price: Double, size: Int) {
+
+  def minute: Long = {
+    (timeStamp / (60 * 1000)).toLong
+  }
+}
 
 object Ticker {
   def fromPacket(datum: ByteString): Ticker = {
@@ -37,7 +46,11 @@ object Ticker {
 }
 
 //{ "ticker": "AAPL", "timestamp": "2016-01-01T15:02:00Z", "open": 112.1, "high": 115.2, "low": 110.0, "close": 114.2, "volume": 13000 }
-case class Candle(ticker: String, timestamp: LocalDateTime, open: Double, high: Double, low: Double, close: Double, volume: Long)
+case class Candle(ticker: String, timestamp: LocalDateTime, open: Double, high: Double, low: Double, close: Double, volume: Long) {
+  def toByteString:ByteString = {
+    CompactByteString(this.asJson.spaces2)
+  }
+}
 
 object Candle {
   def fromTickers(tickers: Seq[Ticker]): Candle = {
@@ -52,6 +65,6 @@ object Candle {
   }
 
   def roundToNextMinute(mills: Long): Long = {
-    mills - (mills % 60 * 1000) + 60 * 1000
+    mills - (mills % (60 * 1000)) + 60 * 1000
   }
 }
