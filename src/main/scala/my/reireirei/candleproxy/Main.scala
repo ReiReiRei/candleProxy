@@ -18,7 +18,7 @@ object TickerClientServer extends App {
 
   try run()
   catch {
-    case _:Throwable => system.terminate()
+    case _: Throwable => system.terminate()
   }
 
   def run(): Unit = {
@@ -39,23 +39,22 @@ object Observer {
   def props(config: Config): Props = Props(classOf[Observer], config)
 }
 
-class Observer(config: Config) extends Actor with ActorLogging{
-  val candleStorage: ActorRef = context.actorOf(CandleStorage.props(self),"CandleStorage")
-  val tickersStorage: ActorRef = context.actorOf(TickersStorage.props(candleStorage),"TickerStorage")
+class Observer(config: Config) extends Actor with ActorLogging {
+  val candleStorage: ActorRef = context.actorOf(CandleStorage.props(self), "CandleStorage")
+  val tickersStorage: ActorRef = context.actorOf(TickersStorage.props(candleStorage), "TickerStorage")
   val local = new InetSocketAddress("localhost", 5556)
   val remote = new InetSocketAddress("localhost", 5555)
 
 
-  private val client = context.actorOf(Client.props(remote, self, candleStorage, tickersStorage),"TickersClient")
-  private val server = context.actorOf(Server.props(local, self),"Server")
+  private val client = context.actorOf(Client.props(remote, self, candleStorage, tickersStorage), "TickersClient")
+  private val server = context.actorOf(Server.props(local, self), "Server")
 
   context watch candleStorage
   context watch tickersStorage
 
-  var router: Router = {
-    Router(BroadcastRoutingLogic())
-  }
+  val candleLogger: ActorRef = context.actorOf(CandleLogger.props(),"CandleLogger")
 
+  var router: Router = Router(BroadcastRoutingLogic()).addRoutee(candleLogger)
 
 
   override def receive: Receive = {

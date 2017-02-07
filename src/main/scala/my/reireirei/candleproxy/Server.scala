@@ -2,7 +2,7 @@ package my.reireirei.candleproxy
 
 import java.net.InetSocketAddress
 
-import akka.actor.{Actor, ActorRef, Props, SupervisorStrategy}
+import akka.actor.{Actor, ActorLogging, ActorRef, Props, SupervisorStrategy}
 import akka.io.Tcp.{Event, PeerClosed, Write}
 import akka.io.{IO, Tcp}
 import akka.util.ByteString
@@ -43,6 +43,16 @@ class Server(remote: InetSocketAddress, observer: ActorRef) extends Actor {
 
   }
 
+}
+
+object CandleLogger {
+  def props() = Props(classOf[CandleLogger])
+}
+class CandleLogger extends Actor with ActorLogging {
+  override def receive = {
+    case MinuteClosed(candles) =>
+    case DeliverHistoryToNewClient(history) =>
+  }
 }
 
 object ClientHandler {
