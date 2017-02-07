@@ -1,11 +1,12 @@
 package my.reireirei.candleproxy
 
-import java.time.LocalDateTime
+import java.nio.ByteOrder
+import java.time._
+import java.time.format.DateTimeFormatter
 
 import akka.util.{ByteString, CompactByteString}
 import io.circe._
 import io.circe.generic.auto._
-import io.circe.parser._
 import io.circe.syntax._
 
 /**
@@ -33,6 +34,8 @@ case class Ticker(timeStamp: Long, ticker: String, price: Double, size: Int) {
 }
 
 object Ticker {
+  implicit val byteOrder = ByteOrder.BIG_ENDIAN
+
   def fromPacket(datum: ByteString): Ticker = {
     val iter = datum.iterator
     val length = iter.getShort
@@ -46,16 +49,19 @@ object Ticker {
 }
 
 //{ "ticker": "AAPL", "timestamp": "2016-01-01T15:02:00Z", "open": 112.1, "high": 115.2, "low": 110.0, "close": 114.2, "volume": 13000 }
-case class Candle(ticker: String, timestamp: LocalDateTime, open: Double, high: Double, low: Double, close: Double, volume: Long) {
-  def toByteString:ByteString = {
-    CompactByteString(this.asJson.spaces2)
+case class Candle(ticker: String, timestamp: ZonedDateTime, open: Double, high: Double, low: Double, close: Double, volume: Long) {
+  def toByteString: ByteString = {
+    val json = this.asJson.noSpaces+"\n"
+    CompactByteString(json)
   }
 }
 
 object Candle {
   def fromTickers(tickers: Seq[Ticker]): Candle = {
-    val ticker = tickers(0).ticker
-    val timestamp = new LocalDateTime(roundToNextMinute(tickers(0).timeStamp))
+    val ticker = tickers.head.ticker
+    val zone = ZoneId.systemDefault()
+    val instant = Instant.ofEpochMilli(roundToNextMinute(tickers.head.timeStamp))
+    val timestamp = ZonedDateTime.ofInstant(instant, zone)
     val open = tickers.minBy(_.timeStamp).price
     val close = tickers.maxBy(_.timeStamp).price
     val low = tickers.minBy(_.timeStamp).price
@@ -67,4 +73,9 @@ object Candle {
   def roundToNextMinute(mills: Long): Long = {
     mills - (mills % (60 * 1000)) + 60 * 1000
   }
+
+  implicit val encodeUser: Encoder[Candle] =
+    Encoder.forProduct7("ticker", "timestamp", "open", "high", "low", "close", "volume")(u =>
+      (u.ticker, u.timestamp.format(DateTimeFormatter.ISO_INSTANT), u.open, u.high, u.low, u.close, u.volume)
+    )
 }

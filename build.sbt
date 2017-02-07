@@ -4,7 +4,8 @@ version := "1.0"
 
 scalaVersion := "2.11.8"
 
-libraryDependencies ++= Seq("com.typesafe.akka" %% "akka-actor" % "2.4.16")
+libraryDependencies ++= Seq("com.typesafe.akka" %% "akka-actor" % "2.4.16",
+  "org.log4s" %% "log4s" % "1.3.4")
 
 val circeVersion = "0.7.0"
 

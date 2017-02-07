@@ -3,8 +3,8 @@ package my.reireirei.candleproxy
 import java.net.InetSocketAddress
 
 import akka.actor.{Actor, ActorRef, Props, SupervisorStrategy}
-import akka.io.{IO, Tcp}
 import akka.io.Tcp.{Event, PeerClosed, Write}
+import akka.io.{IO, Tcp}
 import akka.util.ByteString
 import my.reireirei.candleproxy.CandleStorage.TicCandles
 import my.reireirei.candleproxy.ClientHandler.{DeliverHistoryToNewClient, MinuteClosed, Send}
@@ -14,9 +14,10 @@ import my.reireirei.candleproxy.ClientHandler.{DeliverHistoryToNewClient, Minute
   */
 
 object Server {
-  def props(remote: InetSocketAddress,observer: ActorRef) = Props(classOf[Server],remote,observer)
+  def props(remote: InetSocketAddress, observer: ActorRef) = Props(classOf[Server], remote, observer)
 }
-class Server(remote: InetSocketAddress,observer: ActorRef) extends Actor {
+
+class Server(remote: InetSocketAddress, observer: ActorRef) extends Actor {
 
   import Tcp._
   import context.system
@@ -27,7 +28,6 @@ class Server(remote: InetSocketAddress,observer: ActorRef) extends Actor {
     IO(Tcp) ! Bind(self, remote)
   }
 
-  // do not restart
   override def postRestart(thr: Throwable): Unit = context stop self
 
   def receive: Receive = {

@@ -1,10 +1,10 @@
 package my.reireirei.candleproxy
 
-import javafx.concurrent.Worker
+import java.net.InetSocketAddress
 
-import akka.actor.{Actor, ActorRef, ActorSystem, Props, Terminated}
-import akka.routing.{ActorRefRoutee, BroadcastRoutingLogic, RoundRobinRoutingLogic, Router}
-import com.typesafe.config.ConfigFactory
+import akka.actor.{Actor, ActorLogging, ActorRef, ActorSystem, Props, Terminated}
+import akka.routing.{BroadcastRoutingLogic, Router}
+import com.typesafe.config.{Config, ConfigFactory}
 import my.reireirei.candleproxy.CandleStorage.TicCandles
 import my.reireirei.candleproxy.Observer.{MinuteClosed, NewClient}
 
@@ -13,13 +13,16 @@ import my.reireirei.candleproxy.Observer.{MinuteClosed, NewClient}
   */
 object TickerClientServer extends App {
 
-  val config = ConfigFactory.parseString("akka.loglevel = DEBUG")
+  val config = ConfigFactory.load()
   implicit val system = ActorSystem("candleProxy", config)
 
-  run()
+  try run()
+  catch {
+    case _:Throwable => system.terminate()
+  }
 
   def run(): Unit = {
-    system.actorOf(Observer.props())
+    system.actorOf(Observer.props(config))
 
   }
 
@@ -32,16 +35,19 @@ object Observer {
   case class NewClient(handler: ActorRef)
 
   case class MinuteClosed(candles: TicCandles)
-  def props(): Props = Props(classOf[Observer])
 
+  def props(config: Config): Props = Props(classOf[Observer], config)
 }
 
-class Observer extends Actor {
-  val candleStorage: ActorRef = context.actorOf(CandleStorage.props(self))
-  val tickersStorage: ActorRef = context.actorOf(TickersStorage.props(candleStorage))
+class Observer(config: Config) extends Actor with ActorLogging{
+  val candleStorage: ActorRef = context.actorOf(CandleStorage.props(self),"CandleStorage")
+  val tickersStorage: ActorRef = context.actorOf(TickersStorage.props(candleStorage),"TickerStorage")
+  val local = new InetSocketAddress("localhost", 5556)
+  val remote = new InetSocketAddress("localhost", 5555)
 
-  val client =context.actorOf(Client.props())
-  val server = context.actorOf(Server.props())
+
+  private val client = context.actorOf(Client.props(remote, self, candleStorage, tickersStorage),"TickersClient")
+  private val server = context.actorOf(Server.props(local, self),"Server")
 
   context watch candleStorage
   context watch tickersStorage
@@ -50,10 +56,12 @@ class Observer extends Actor {
     Router(BroadcastRoutingLogic())
   }
 
+
+
   override def receive: Receive = {
     case NewClient(handler) =>
-      router.addRoutee(handler)
-      candleStorage ! CandleStorage.GetHistoryCandles
+      router = router.addRoutee(handler)
+      candleStorage ! CandleStorage.GetHistoryCandles(handler)
     case MinuteClosed(candles) =>
       router.route(ClientHandler.MinuteClosed(candles), sender)
     case Terminated(a) =>
